@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Robot Kinematics Playground</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ── Header ─────────────────────────────────────────────── -->
+  <header>
+    <div class="logo">⚙</div>
+    <h1>Robot Kinematics <span>Playground</span></h1>
+    <div class="header-tags">
+      <span class="tag">PoE</span>
+      <span class="tag">FK · IK · Dynamics</span>
+    </div>
+    <div class="header-right">
+      <button class="btn" id="btn-custom-robot">+ Custom Robot</button>
+      <button class="btn primary" id="btn-reset-joints">Reset Joints</button>
+    </div>
+  </header>
+
+  <!-- ── Left Panel ─────────────────────────────────────────── -->
+  <aside id="left-panel">
+
+    <!-- Robot configuration -->
+    <div class="panel-section">
+      <div class="section-title">Robot Setup</div>
+      <div class="config-row">
+        <span class="config-label">Joints</span>
+        <div id="dof-picker" class="dof-picker"></div>
+      </div>
+      <div class="config-sub">Link lengths (m)</div>
+      <div id="link-editors" class="link-editors"></div>
+      <button class="btn" id="btn-rebuild" style="width:100%;margin-top:6px">Apply Changes</button>
+    </div>
+
+    <!-- Mode -->
+    <div class="panel-section">
+      <div class="section-title">Mode</div>
+      <div class="mode-tabs">
+        <div class="mode-tab active" data-mode="fk">FK · Move Joints</div>
+        <div class="mode-tab" data-mode="ik">IK · Set Target</div>
+      </div>
+    </div>
+
+    <!-- FK Controls -->
+    <div class="panel-section" id="fk-controls">
+      <div class="section-title">Joint Angles &amp; Limits</div>
+      <div class="section-desc" style="margin-bottom:6px">
+        Drag or type a value. Edit the <span style="color:var(--accent)">min°</span> /
+        <span style="color:var(--accent)">max°</span> boxes to set joint limits.
+      </div>
+      <div id="joint-sliders"></div>
+    </div>
+
+    <!-- IK Controls -->
+    <div class="panel-section hidden" id="ik-controls">
+      <div class="section-title">Target Position</div>
+      <div class="ik-inputs">
+        <div class="ik-field"><label>X (m)</label><input type="number" id="ik-x" value="1.2" step="0.05"></div>
+        <div class="ik-field"><label>Y (m)</label><input type="number" id="ik-y" value="0.5" step="0.05"></div>
+        <div class="ik-field"><label>Z (m)</label><input type="number" id="ik-z" value="0"   step="0.05"></div>
+      </div>
+      <button class="btn primary" id="btn-solve-ik" style="width:100%">Solve IK →</button>
+      <div id="ik-status" class="status-badge" style="display:none"></div>
+      <p class="hint-text">Or click in the viewport to place the target.</p>
+    </div>
+
+    <!-- Camera -->
+    <div class="panel-section">
+      <div class="section-title">Viewport</div>
+      <div style="display:flex;gap:6px">
+        <button class="btn" id="btn-cam-toggle" style="flex:1">⊙ 3D</button>
+        <button class="btn" id="btn-reset-cam"  style="flex:1">↺ Reset</button>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- ── Viewport ────────────────────────────────────────────── -->
+  <main id="viewport">
+    <canvas id="three-canvas"></canvas>
+    <div class="viewport-overlay">
+      <div class="viewport-badge" id="vp-badge">3-DOF Planar · Product of Exponentials</div>
+    </div>
+    <div class="viewport-controls">
+      <div class="vp-btn">🖱 Drag · Scroll</div>
+    </div>
+    <div id="click-hint">Click to place IK target</div>
+  </main>
+
+  <!-- ── Right Panel ─────────────────────────────────────────── -->
+  <aside id="right-panel">
+
+    <!-- Tab bar -->
+    <div class="right-tabs">
+      <button class="right-tab active" data-tab="position">Position</button>
+      <button class="right-tab" data-tab="dynamics">Dynamics</button>
+      <button class="right-tab" data-tab="math">Math</button>
+    </div>
+
+    <!-- ═══ POSITION TAB ═══ -->
+    <div class="tab-content" id="tab-position">
+
+      <div class="panel-section">
+        <div class="section-title">End-Effector Position</div>
+        <div class="section-desc">Where the robot's tip is in 3D space (meters)</div>
+        <div class="ee-pos">
+          <div class="ee-axis"><div class="ee-axis-label">X</div><div class="ee-axis-val x" id="ee-x">–</div></div>
+          <div class="ee-axis"><div class="ee-axis-label">Y</div><div class="ee-axis-val y" id="ee-y">–</div></div>
+          <div class="ee-axis"><div class="ee-axis-label">Z</div><div class="ee-axis-val z" id="ee-z">–</div></div>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="section-title">Dexterity Index</div>
+        <div class="section-desc">How freely the tip can move — higher = more control authority, 0 = stuck in a singularity</div>
+        <div class="manip-gauge">
+          <div class="manip-row">
+            <div class="manip-value" id="manip-value">—</div>
+            <div class="manip-quality" id="manip-quality"></div>
+          </div>
+          <div class="manip-bar-track">
+            <div class="manip-bar-fill" id="manip-bar" style="width:0%"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="section-title">Tip Velocity Sensitivity</div>
+        <div class="section-desc">How much the tip moves (m) per radian of each joint — analytical Jacobian J<sub>a</sub> (3×n)</div>
+        <div style="overflow-x:auto">
+          <table class="jac-table">
+            <thead><tr id="jac-head"></tr></thead>
+            <tbody id="jac-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- /tab-position -->
+
+    <!-- ═══ DYNAMICS TAB ═══ -->
+    <div class="tab-content hidden" id="tab-dynamics">
+
+      <div class="panel-section">
+        <div class="section-title">Gravity Torques</div>
+        <div class="section-desc">Motor force needed to hold this pose against gravity (N·m). ↺ counterclockwise · ↻ clockwise</div>
+        <div id="gravity-bars" class="torque-bars"></div>
+      </div>
+
+      <div class="panel-section">
+        <div class="section-title">Mass Matrix M(q)</div>
+        <div class="section-desc">Resistance to acceleration (kg·m²). Diagonal = self-inertia, off-diagonal = joint coupling.</div>
+        <div id="mass-matrix-display"></div>
+      </div>
+
+      <div class="panel-section">
+        <div class="section-title">Total Torques</div>
+        <div class="section-desc">Gravity only when stationary — includes inertia &amp; Coriolis when moving.</div>
+        <div id="torque-bars" class="torque-bars"></div>
+      </div>
+
+    </div><!-- /tab-dynamics -->
+
+    <!-- ═══ MATH TAB ═══ -->
+    <div class="tab-content hidden" id="tab-math">
+
+      <div class="panel-section">
+        <div class="section-title">Transformation T ∈ SE(3)</div>
+        <div class="section-desc">4×4 matrix: top-left 3×3 = rotation, right column (<span style="color:var(--accent)">blue</span>) = position</div>
+        <div class="matrix-grid" id="fk-matrix"></div>
+      </div>
+
+      <div class="panel-section">
+        <!-- Title row with frame toggle -->
+        <div class="section-header-row">
+          <div>
+            <div class="section-title">Jacobian (6×n)</div>
+            <div class="section-desc">Full twist Jacobian — top 3 rows = angular, bottom 3 rows = linear velocity</div>
+          </div>
+          <div class="frame-btns" id="frame-toggle">
+            <button class="frame-btn active" data-frame="space">Space J<sub>s</sub></button>
+            <button class="frame-btn"        data-frame="body" >Body J<sub>b</sub></button>
+          </div>
+        </div>
+        <div style="overflow-x:auto;margin-top:8px">
+          <table class="jac-table">
+            <thead><tr id="jac-head-math"></tr></thead>
+            <tbody id="jac-body-math"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="section-title">Screw Axes</div>
+        <div class="section-desc" id="screw-frame-desc">Space-frame axes S<sub>i</sub> = [ω; v] — each column defines one joint's motion when all others are locked</div>
+        <div style="overflow-x:auto">
+          <table class="jac-table" id="screw-table">
+            <thead><tr id="screw-head"></tr></thead>
+            <tbody id="screw-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- /tab-math -->
+
+  </aside>
+</div>
+
+<!-- ── Custom Robot Modal ───────────────────────────────────── -->
+<div id="modal-overlay">
+  <div class="modal">
+    <h2>Define Custom Robot</h2>
+    <p>Enter one screw axis per line — 6 values each: <code style="color:var(--accent)">ω_x ω_y ω_z  v_x v_y v_z</code><br>
+       Then enter the 4×4 home config M (16 row-major values).</p>
+
+    <!-- Frame selector -->
+    <div class="modal-frame-row">
+      <span class="config-label">Axes in</span>
+      <div class="frame-btns" id="modal-frame-toggle">
+        <button class="frame-btn active" data-frame="space">Space frame S</button>
+        <button class="frame-btn"        data-frame="body" >Body frame B</button>
+      </div>
+      <span id="modal-frame-hint" class="modal-frame-hint">
+        S: screw axes in world frame · FK = exp([S₁]q₁)·…·M
+      </span>
+    </div>
+
+    <div>
+      <label>Screw Axes (one joint per line)</label>
+      <textarea id="custom-screws" rows="5" placeholder="0 0 1 0  0 0&#10;0 0 1 0 -1 0&#10;0 0 1 0 -1.8 0"></textarea>
+    </div>
+    <div>
+      <label>Home Config M (16 values, row-major)</label>
+      <textarea id="custom-m" rows="2" placeholder="1 0 0 2.4  0 1 0 0  0 0 1 0  0 0 0 1"></textarea>
+    </div>
+    <div class="modal-error" id="modal-error"></div>
+    <div class="modal-footer">
+      <button class="btn" id="btn-modal-cancel">Cancel</button>
+      <button class="btn primary" id="btn-modal-apply">Apply →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Scripts ─────────────────────────────────────────────── -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/controls/OrbitControls.js"></script>
+<script src="js/math.js"></script>
+<script src="js/kinematics.js"></script>
+<script src="js/dynamics.js"></script>
+<script src="js/robots.js"></script>
+<script src="js/app.js"></script>
+
+<style>
+  .hidden { display: none !important; }
+  code { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+</style>
+</body>
+</html>

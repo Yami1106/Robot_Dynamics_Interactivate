@@ -1,4 +1,4 @@
-# Robot_Dynamics_Interactivate[https://yamirobotdynamics.netlify.app]
+# Robot_Dynamics_Interactivate (https://yamirobotdynamics.netlify.app)
 
 ## Overview
 
